@@ -39,10 +39,6 @@ def create_table_if_not_exists():
 
 create_table_if_not_exists()
 
-@app.route('/')
-def home():
-    return send_from_directory('templates', 'identify.html')
-
 @app.route('/identify', methods=['POST'])
 def identify():
     try:
@@ -58,7 +54,8 @@ def identify():
 
         cursor.execute("""
             SELECT * FROM Contact
-            WHERE email = %s OR phoneNumber = %s
+            WHERE (email = %s AND email IS NOT NULL)
+               OR (phoneNumber = %s AND phoneNumber IS NOT NULL)
         """, (email, phone))
         contacts = cursor.fetchall()
 
@@ -83,31 +80,38 @@ def identify():
                 }
             })
 
-        all_contact_ids = {c['id'] for c in contacts}
-        emails = set(c['email'] for c in contacts if c['email'])
-        phones = set(c['phoneNumber'] for c in contacts if c['phoneNumber'])
+        # Determine primary contact
+        primary_contact = None
+        for c in contacts:
+            if c['linkprecedence'] == 'primary':
+                primary_contact = c
+                break
+        if not primary_contact:
+            primary_contact = min(contacts, key=lambda x: x['createdat'])
 
-        primary_contact = min(contacts, key=lambda c: c['createdat'])
         primary_id = primary_contact['id']
-        secondary_ids = []
 
-        for contact in contacts:
-            if contact['id'] != primary_id:
-                if contact['linkprecedence'] != 'secondary' or contact['linkedid'] != primary_id:
+        secondary_ids = []
+        for c in contacts:
+            if c['id'] != primary_id:
+                if c['linkprecedence'] != 'secondary' or c['linkedid'] != primary_id:
                     cursor.execute("""
                         UPDATE Contact
                         SET linkPrecedence = 'secondary',
                             linkedId = %s,
                             updatedAt = %s
                         WHERE id = %s
-                    """, (primary_id, now, contact['id']))
-                secondary_ids.append(contact['id'])
-
+                    """, (primary_id, now, c['id']))
+                secondary_ids.append(c['id'])
         conn.commit()
 
+        # Check if new info provided (new email or phone)
+        existing_emails = {c['email'] for c in contacts if c['email']}
+        existing_phones = {c['phonenumber'] for c in contacts if c['phonenumber']}
+
         has_new_info = (
-            (email and email not in emails) or
-            (phone and phone not in phones)
+            (email and email not in existing_emails) or
+            (phone and phone not in existing_phones)
         )
 
         if has_new_info:
@@ -120,14 +124,15 @@ def identify():
             conn.commit()
             secondary_ids.append(new_secondary_id)
             if email:
-                emails.add(email)
+                existing_emails.add(email)
             if phone:
-                phones.add(phone)
+                existing_phones.add(phone)
 
-        final_emails = list(emails)
-        final_phones = list(phones)
+        final_emails = list(existing_emails)
+        final_phones = list(existing_phones)
+
         final_emails.sort(key=lambda x: x != primary_contact['email'])
-        final_phones.sort(key=lambda x: x != primary_contact['phoneNumber'])
+        final_phones.sort(key=lambda x: x != primary_contact['phonenumber'])
 
         cursor.close()
         conn.close()
@@ -145,4 +150,4 @@ def identify():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5432, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
