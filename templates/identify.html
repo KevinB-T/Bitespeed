@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Identify Contact</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background-color: #f4f4f4;
+    }
+    form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 300px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    input {
+      display: block;
+      margin-bottom: 15px;
+      padding: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px;
+      width: 100%;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+    }
+    pre {
+      background: #222;
+      color: #0f0;
+      padding: 15px;
+      margin-top: 20px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Identify Contact</h2>
+<form id="identifyForm">
+  <input type="email" id="email" placeholder="Enter Email (optional)">
+  <input type="tel" id="phoneNumber" placeholder="Enter Phone Number (optional)">
+  <button type="submit">Submit</button>
+</form>
+
+<pre id="responseOutput">Response will appear here...</pre>
+
+<script>
+  const form = document.getElementById("identifyForm");
+  const output = document.getElementById("responseOutput");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const email = document.getElementById("email").value || null;
+    const phoneNumber = document.getElementById("phoneNumber").value || null;
+
+    const payload = {
+      email: email,
+      phoneNumber: phoneNumber
+    };
+
+    try {
+      const res = await fetch("http://localhost:5000/identify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json();
+      output.textContent = JSON.stringify(json, null, 2);
+    } catch (err) {
+      output.textContent = "Error: " + err.message;
+    }
+  });
+</script>
+
+</body>
+</html>
