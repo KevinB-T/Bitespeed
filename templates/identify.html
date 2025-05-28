@@ -103,7 +103,10 @@
       const res = await fetch('https://bitespeed-backend-g7rd.onrender.com/identify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+            email: emailValue,
+            phoneNumber: phoneValue
+        })
       });
 
       const json = await res.json();
