@@ -58,7 +58,7 @@ def identify():
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # Step 1: Fetch all contacts with matching email or phoneNumber
+        # Fetch all contacts with matching email or phoneNumber
         cursor.execute("""
             SELECT * FROM Contact
             WHERE email = %s OR phoneNumber = %s
@@ -66,6 +66,7 @@ def identify():
         contacts = cursor.fetchall()
 
         if not contacts:
+            # No contacts found - insert a new primary contact
             now = datetime.utcnow()
             cursor.execute("""
                 INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt)
@@ -76,6 +77,7 @@ def identify():
             conn.commit()
             cursor.close()
             conn.close()
+
             return jsonify({
                 "contact": {
                     "primaryContatctId": new_id,
@@ -85,18 +87,21 @@ def identify():
                 }
             })
 
-        all_contact_ids = {c['id'] for c in contacts}
-        emails = set(c['email'] for c in contacts if c['email'])
-        phones = set(c['phoneNumber'] for c in contacts if c['phoneNumber'])
+        # Find the oldest primary contact among all matched contacts (by createdAt)
+        primary_contacts = [c for c in contacts if c['linkprecedence'] == 'primary']
+        if not primary_contacts:
+            # In rare case no primary found, fallback: treat first contact as primary
+            primary_contact = contacts[0]
+        else:
+            primary_contact = min(primary_contacts, key=lambda c: c['createdat'])
 
-        primary_contact = min(contacts, key=lambda c: c['createdat'])
         primary_id = primary_contact['id']
-
-        secondary_ids = []
         now = datetime.utcnow()
 
+        # Update any other primary contacts to secondary linking to oldest primary
         for contact in contacts:
             if contact['id'] != primary_id:
+                # If not already secondary linked to primary_id, update
                 if contact['linkprecedence'] != 'secondary' or contact['linkedid'] != primary_id:
                     cursor.execute("""
                         UPDATE Contact
@@ -105,15 +110,20 @@ def identify():
                             updatedAt = %s
                         WHERE id = %s
                     """, (primary_id, now, contact['id']))
-                secondary_ids.append(contact['id'])
 
         conn.commit()
 
-        final_emails = list({c['email'] for c in contacts if c['email']})
-        final_phones = list({c['phoneNumber'] for c in contacts if c['phoneNumber']})
+        # Fetch all related contacts: primary + secondaries linked to primary
+        cursor.execute("""
+            SELECT * FROM Contact
+            WHERE id = %s OR linkedId = %s
+        """, (primary_id, primary_id))
+        all_related = cursor.fetchall()
 
-        final_emails.sort(key=lambda x: x != primary_contact['email'])
-        final_phones.sort(key=lambda x: x != primary_contact['phoneNumber'])
+        # Aggregate emails, phones, and secondary ids
+        emails = list({c['email'] for c in all_related if c['email']})
+        phones = list({c['phoneNumber'] for c in all_related if c['phoneNumber']})
+        secondary_ids = [c['id'] for c in all_related if c['id'] != primary_id]
 
         cursor.close()
         conn.close()
@@ -121,15 +131,12 @@ def identify():
         return jsonify({
             "contact": {
                 "primaryContatctId": primary_id,
-                "emails": final_emails,
-                "phoneNumbers": final_phones,
+                "emails": emails,
+                "phoneNumbers": phones,
                 "secondaryContactIds": secondary_ids
             }
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
 
