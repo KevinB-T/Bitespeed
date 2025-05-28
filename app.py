@@ -1,20 +1,44 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import mysql.connector
+import psycopg2
+import psycopg2.extras
 from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
 db_config = {
-    "host": "localhost",
+    "host": "dpg-d0rg1gbe5dus73ftsp0g-a",
+    "port": 5432,
     "user": "root",
-    "password": "Kvn@852456",
-    "database": "bitespeed"
+    "password": "C1MeN2WdV7fXW1fe9hZtCWweoZu1sXXX",
+    "database": "bitespeeddb_x9nw"
 }
 
 def get_db_connection():
-    return mysql.connector.connect(**db_config)
+    return psycopg2.connect(**db_config)
+
+def create_table_if_not_exists():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Contact (
+            id SERIAL PRIMARY KEY,
+            phoneNumber VARCHAR(20),
+            email VARCHAR(255),
+            linkedId INTEGER,
+            linkPrecedence VARCHAR(10) CHECK (linkPrecedence IN ('primary', 'secondary')) NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            deletedAt TIMESTAMP DEFAULT NULL,
+            FOREIGN KEY (linkedId) REFERENCES Contact(id)
+        );
+    """)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+create_table_if_not_exists()
 
 @app.route('/identify', methods=['POST'])
 def identify():
@@ -27,7 +51,7 @@ def identify():
             return jsonify({"error": "At least one of email or phoneNumber is required"}), 400
 
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         # Step 1: Fetch all contacts with matching email or phoneNumber
         cursor.execute("""
@@ -37,14 +61,14 @@ def identify():
         contacts = cursor.fetchall()
 
         if not contacts:
-            # No matches, create new primary
-            now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            now = datetime.utcnow()
             cursor.execute("""
                 INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt)
                 VALUES (%s, %s, 'primary', %s, %s)
+                RETURNING id
             """, (email, phone, now, now))
+            new_id = cursor.fetchone()['id']
             conn.commit()
-            new_id = cursor.lastrowid
             cursor.close()
             conn.close()
             return jsonify({
@@ -56,23 +80,19 @@ def identify():
                 }
             })
 
-        # Step 2: Multiple matching contacts
-        # Build full list of linked contacts (traversal not needed as per PDF rules: match by email or phone)
         all_contact_ids = {c['id'] for c in contacts}
         emails = set(c['email'] for c in contacts if c['email'])
         phones = set(c['phoneNumber'] for c in contacts if c['phoneNumber'])
 
-        # Step 3: Determine the primary (oldest one)
-        primary_contact = min(contacts, key=lambda c: c['createdAt'])
+        primary_contact = min(contacts, key=lambda c: c['createdat'])
         primary_id = primary_contact['id']
 
         secondary_ids = []
-        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.utcnow()
 
-        # Step 4: Update all others (even primaries) to secondary if not already
         for contact in contacts:
             if contact['id'] != primary_id:
-                if contact['linkPrecedence'] != 'secondary' or contact['linkedId'] != primary_id:
+                if contact['linkprecedence'] != 'secondary' or contact['linkedid'] != primary_id:
                     cursor.execute("""
                         UPDATE Contact
                         SET linkPrecedence = 'secondary',
@@ -84,11 +104,9 @@ def identify():
 
         conn.commit()
 
-        # Step 5: Collect updated full contact info
         final_emails = list({c['email'] for c in contacts if c['email']})
         final_phones = list({c['phoneNumber'] for c in contacts if c['phoneNumber']})
 
-        # Ensure the primary's values are first in order
         final_emails.sort(key=lambda x: x != primary_contact['email'])
         final_phones.sort(key=lambda x: x != primary_contact['phoneNumber'])
 
