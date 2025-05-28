@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import psycopg2
 import psycopg2.extras
@@ -39,6 +39,11 @@ def create_table_if_not_exists():
     conn.close()
 
 create_table_if_not_exists()
+
+@app.route('/')
+def home():
+    # Serve your home page html
+    return send_from_directory('templates', 'identify.html')
 
 @app.route('/identify', methods=['POST'])
 def identify():

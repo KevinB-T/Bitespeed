@@ -1,35 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Identify Contact</title>
+  <meta charset="UTF-8" />
+  <title>Bitespeed App</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 40px;
       background-color: #f4f4f4;
     }
-    form {
+    .page {
+      display: none;
       background: #fff;
       padding: 20px;
       border-radius: 8px;
-      width: 300px;
+      width: 320px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-    input {
+    .page.active {
       display: block;
-      margin-bottom: 15px;
+    }
+    button, input {
       padding: 10px;
       width: 100%;
       box-sizing: border-box;
+      margin-bottom: 15px;
+      border-radius: 5px;
     }
     button {
-      padding: 10px;
-      width: 100%;
       background-color: #007bff;
-      color: #fff;
+      color: white;
       border: none;
-      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
     }
     pre {
       background: #222;
@@ -39,48 +44,72 @@
       white-space: pre-wrap;
       word-wrap: break-word;
       border-radius: 5px;
+      height: 200px;
+      overflow-y: auto;
     }
   </style>
 </head>
 <body>
 
-<h2>Identify Contact</h2>
-<form id="identifyForm">
-  <input type="email" id="email" placeholder="Enter Email (optional)">
-  <input type="tel" id="phoneNumber" placeholder="Enter Phone Number (optional)">
-  <button type="submit">Submit</button>
-</form>
+<!-- Home Page -->
+<div id="homePage" class="page active">
+  <h2>Welcome to Bitespeed</h2>
+  <button id="goToIdentifyBtn">Go to Identify Contact</button>
+</div>
 
-<pre id="responseOutput">Response will appear here...</pre>
+<!-- Identify Page -->
+<div id="identifyPage" class="page">
+  <h2>Identify Contact</h2>
+  <form id="identifyForm">
+    <input type="email" id="email" placeholder="Enter Email (optional)" />
+    <input type="tel" id="phoneNumber" placeholder="Enter Phone Number (optional)" />
+    <button type="submit">Submit</button>
+  </form>
+  <button id="backBtn">Back to Home</button>
+  <pre id="responseOutput">Response will appear here...</pre>
+</div>
 
 <script>
-  const form = document.getElementById("identifyForm");
-  const output = document.getElementById("responseOutput");
+  const homePage = document.getElementById('homePage');
+  const identifyPage = document.getElementById('identifyPage');
+  const goToIdentifyBtn = document.getElementById('goToIdentifyBtn');
+  const backBtn = document.getElementById('backBtn');
+  const form = document.getElementById('identifyForm');
+  const output = document.getElementById('responseOutput');
 
-  form.addEventListener("submit", async (e) => {
+  // Navigate to Identify page
+  goToIdentifyBtn.addEventListener('click', () => {
+    homePage.classList.remove('active');
+    identifyPage.classList.add('active');
+    output.textContent = 'Response will appear here...';  // reset output
+    form.reset();
+  });
+
+  // Back to Home page
+  backBtn.addEventListener('click', () => {
+    identifyPage.classList.remove('active');
+    homePage.classList.add('active');
+  });
+
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const email = document.getElementById("email").value || null;
-    const phoneNumber = document.getElementById("phoneNumber").value || null;
+    const email = document.getElementById('email').value || null;
+    const phoneNumber = document.getElementById('phoneNumber').value || null;
 
-    const payload = {
-      email: email,
-      phoneNumber: phoneNumber
-    };
+    const payload = { email, phoneNumber };
 
     try {
-      const res = await fetch("https://bitespeed-backend-g7rd.onrender.com/identify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+      const res = await fetch('https://bitespeed-backend-g7rd.onrender.com/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       const json = await res.json();
       output.textContent = JSON.stringify(json, null, 2);
     } catch (err) {
-      output.textContent = "Error: " + err.message;
+      output.textContent = 'Error: ' + err.message;
     }
   });
 </script>
