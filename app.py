@@ -39,6 +39,10 @@ def create_table_if_not_exists():
 
 create_table_if_not_exists()
 
+@app.route('/')
+def home():
+    return send_from_directory('templates', 'identify.html')
+
 @app.route('/identify', methods=['POST'])
 def identify():
     try:
