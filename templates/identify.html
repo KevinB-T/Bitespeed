@@ -104,9 +104,9 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            email: emailValue,
-            phoneNumber: phoneValue
-        })
+        email: emailValue,
+        phoneNumber: phoneValue
+    })
       });
 
       const json = await res.json();
