@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import mysql.connector
+import psycopg2
+import psycopg2.extras
 from datetime import datetime
 
 app = Flask(__name__)
@@ -15,22 +16,21 @@ db_config = {
 }
 
 def get_db_connection():
-    return mysql.connector.connect(**db_config)
+    return psycopg2.connect(**db_config)
 
 def create_table_if_not_exists():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Contact (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             phoneNumber VARCHAR(20),
             email VARCHAR(255),
-            linkedId INT,
-            linkPrecedence ENUM('primary', 'secondary') NOT NULL,
+            linkedId INTEGER REFERENCES Contact(id),
+            linkPrecedence VARCHAR(10) CHECK (linkPrecedence IN ('primary', 'secondary')) NOT NULL,
             createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            deletedAt TIMESTAMP DEFAULT NULL,
-            FOREIGN KEY (linkedId) REFERENCES Contact(id)
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            deletedAt TIMESTAMP DEFAULT NULL
         );
     """)
     conn.commit()
@@ -54,7 +54,7 @@ def identify():
             return jsonify({"error": "At least one of email or phoneNumber is required"}), 400
 
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cursor.execute("""
             SELECT * FROM Contact
@@ -62,15 +62,16 @@ def identify():
         """, (email, phone))
         contacts = cursor.fetchall()
 
-        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.utcnow()
 
         if not contacts:
             cursor.execute("""
                 INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt)
                 VALUES (%s, %s, 'primary', %s, %s)
+                RETURNING id
             """, (email, phone, now, now))
+            new_id = cursor.fetchone()['id']
             conn.commit()
-            new_id = cursor.lastrowid
             cursor.close()
             conn.close()
             return jsonify({
@@ -86,13 +87,13 @@ def identify():
         emails = set(c['email'] for c in contacts if c['email'])
         phones = set(c['phoneNumber'] for c in contacts if c['phoneNumber'])
 
-        primary_contact = min(contacts, key=lambda c: c['createdAt'])
+        primary_contact = min(contacts, key=lambda c: c['createdat'])
         primary_id = primary_contact['id']
         secondary_ids = []
 
         for contact in contacts:
             if contact['id'] != primary_id:
-                if contact['linkPrecedence'] != 'secondary' or contact['linkedId'] != primary_id:
+                if contact['linkprecedence'] != 'secondary' or contact['linkedid'] != primary_id:
                     cursor.execute("""
                         UPDATE Contact
                         SET linkPrecedence = 'secondary',
@@ -113,9 +114,10 @@ def identify():
             cursor.execute("""
                 INSERT INTO Contact (email, phoneNumber, linkPrecedence, linkedId, createdAt, updatedAt)
                 VALUES (%s, %s, 'secondary', %s, %s, %s)
+                RETURNING id
             """, (email, phone, primary_id, now, now))
+            new_secondary_id = cursor.fetchone()['id']
             conn.commit()
-            new_secondary_id = cursor.lastrowid
             secondary_ids.append(new_secondary_id)
             if email:
                 emails.add(email)
